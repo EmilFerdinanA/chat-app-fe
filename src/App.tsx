@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { socket } from "./lib/socket";
 
 const API_URL = "http://localhost:3000";
 
@@ -9,11 +10,11 @@ function App() {
   const [messages, setMessages] = useState<any[]>([]);
   const [text, setText] = useState("");
 
-  // Load chat every time both IDs are set
+  // Load initial messages
   useEffect(() => {
     if (!currentUser || !receiverId) return;
 
-    const load = async () => {
+    const loadMessages = async () => {
       try {
         const res = await axios.get(`${API_URL}/chat/${receiverId}`, {
           headers: { "x-user-id": currentUser },
@@ -24,24 +25,38 @@ function App() {
       }
     };
 
-    load();
+    loadMessages();
+  }, [currentUser, receiverId]);
 
-    // Auto refresh messages every 1.5 seconds
-    const interval = setInterval(load, 1500);
+  // Listen realtime message
+  useEffect(() => {
+    socket.on("new-message", (msg: any) => {
+      if (
+        (msg.senderId === currentUser && msg.receiverId === receiverId) ||
+        (msg.senderId === receiverId && msg.receiverId === currentUser)
+      ) {
+        setMessages((prev) => [...prev, msg]);
+      }
+    });
 
-    return () => clearInterval(interval);
+    return () => {
+      socket.off("new-message");
+    };
   }, [currentUser, receiverId]);
 
   const sendMessage = async () => {
     if (!text.trim()) return;
 
-    const res = await axios.post(
+    await axios.post(
       `${API_URL}/chat/${receiverId}`,
       { text },
-      { headers: { "x-user-id": currentUser } }
+      {
+        headers: {
+          "x-user-id": currentUser,
+        },
+      }
     );
 
-    setMessages((prev) => [...prev, res.data]);
     setText("");
   };
 
